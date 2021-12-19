@@ -1,0 +1,6 @@
+apiVersion: solo.solo.com/v1alpha1
+kind: IngressOperator
+metadata:
+  name: ingressoperator-sample
+spec:
+  # Add fields here

@@ -1,0 +1,20 @@
+# permissions for end users to view ingressoperators.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ingressoperator-viewer-role
+rules:
+- apiGroups:
+  - solo.solo.com
+  resources:
+  - ingressoperators
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - solo.solo.com
+  resources:
+  - ingressoperators/status
+  verbs:
+  - get
