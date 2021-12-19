@@ -1,0 +1,56 @@
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- resources:
+  - services
+  verbs:
+  - get
+  - update
+- apiGroups:
+  - apps.k8s.io
+  resources:
+  - deployments
+  verbs:
+  - get
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+- apiGroups:
+  - solo.solo.com
+  resources:
+  - ingressoperators
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - solo.solo.com
+  resources:
+  - ingressoperators/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - solo.solo.com
+  resources:
+  - ingressoperators/status
+  verbs:
+  - get
+  - patch
+  - update

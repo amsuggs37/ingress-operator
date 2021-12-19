@@ -18,24 +18,45 @@ package controllers
 
 import (
 	"context"
+	"os"
 
+	solov1alpha1 "github.com/amsuggs37/ingress-operator.git/api/v1alpha1"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	solov1alpha1 "github.com/amsuggs37/ingress-operator.git/api/v1alpha1"
 )
 
 // IngressOperatorReconciler reconciles a IngressOperator object
 type IngressOperatorReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	opNamespace string
+	opName      string
+}
+
+var (
+	opNamespaceVar = "OPERATOR_NAMESPACE"
+	opNameVar      = "OPERATOR_NAME"
+)
+
+func (r *IngressOperatorReconciler) initController() {
+	r.opNamespace = os.Getenv(opNamespaceVar)
+	r.opName = os.Getenv(opNameVar)
 }
 
 //+kubebuilder:rbac:groups=solo.solo.com,resources=ingressoperators,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=solo.solo.com,resources=ingressoperators/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=solo.solo.com,resources=ingressoperators/finalizers,verbs=update
+//+kubebuilder:rbac:groups=,resources=services,verbs=get;update
+//+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;create;update;patch;delete
+//+kubebuilder:rbac:groups=apps.k8s.io,resources=deployments,verbs=get;
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -47,9 +68,84 @@ type IngressOperatorReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *IngressOperatorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	cLog := log.FromContext(ctx)
 
-	// your logic here
+	// load the ingress operator
+	opr := &solov1alpha1.IngressOperator{}
+	err := r.Get(ctx, types.NamespacedName{
+		Namespace: r.opNamespace,
+		Name:      r.opName,
+	}, opr)
+	// if there was an error loading, log and return
+	if err != nil {
+		cLog.Error(err, "Failed to retrieve ingress operator for reconcile!", "opNamespace:", r.opNamespace, "opName:", r.opName)
+		return ctrl.Result{}, err
+	}
+
+	// load the service request
+	svc := &corev1.Service{}
+	err = r.Get(ctx, req.NamespacedName, svc)
+	// if there was an error loading, log and return
+	if err != nil {
+		cLog.Error(err, "Failed to retrieve service request!", "namespace:", req.Namespace, "name:", req.Name)
+		return ctrl.Result{}, err
+	}
+
+	// TODO move this if/else block to init for controller.
+	if opr.Spec.IngressClass == "nginx" {
+		deploy := &appsv1.Deployment{}
+		err = r.Get(ctx, types.NamespacedName{
+			Namespace: "ingress-nginx",
+			Name:      "ingress-nginx-controller",
+		}, deploy)
+		if err != nil {
+			// TODO apply the yaml in ./yamls/nginx/ingress-nginx-controller.yaml
+		}
+	} else if opr.Spec.IngressClass == "AWS" {
+		deploy := &appsv1.Deployment{}
+		err = r.Get(ctx, types.NamespacedName{
+			Namespace: "kube-system",
+			Name:      "aws-load-balancer-controller",
+		}, deploy)
+		if err != nil {
+			// TODO apply the yaml in ./yamls/aws/aws-load-balancer-controller.yaml
+		}
+	} else if opr.Spec.IngressClass == "GCE" {
+		// TODO
+	} else {
+		// do nothing
+	}
+
+	if len(svc.Spec.ExternalIPs) == 0 || opr.Spec.IngressExternalIPs {
+		ing := &networkingv1.Ingress{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Ingress",
+				APIVersion: "networking.k8s.io/v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      svc.Name + "-ing",
+				Namespace: svc.Namespace,
+			},
+			Spec: networkingv1.IngressSpec{
+				IngressClassName: &opr.Spec.IngressClass,
+				DefaultBackend: &networkingv1.IngressBackend{
+					Service: &networkingv1.IngressServiceBackend{
+						Name: svc.Name,
+						Port: networkingv1.ServiceBackendPort{
+							Number: svc.Spec.Ports[0].Port, // TODO is there a better way to handle this? How to know which port to ingress?
+						},
+					},
+				},
+				// TODO implement TLS.
+				// TODO do I need rules?
+			},
+		}
+		err = r.Create(ctx, ing)
+		if err != nil {
+			cLog.Error(err, "Failed to create ingress for service request!", "namespace:", req.Namespace, "name:", req.Name)
+			return ctrl.Result{}, err
+		}
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -57,6 +153,6 @@ func (r *IngressOperatorReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 // SetupWithManager sets up the controller with the Manager.
 func (r *IngressOperatorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&solov1alpha1.IngressOperator{}).
+		For(&corev1.Service{}).
 		Complete(r)
 }
