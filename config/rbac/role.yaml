@@ -10,8 +10,13 @@ rules:
   - services
   verbs:
   - get
-  - list
   - update
+- apiGroups:
+  - apps.k8s.io
+  resources:
+  - deployments
+  verbs:
+  - get
 - apiGroups:
   - networking.k8s.io
   resources:

@@ -36,10 +36,10 @@ spec:
           spec:
             description: IngressOperatorSpec defines the desired state of IngressOperator
             properties:
-              system:
-                description: Foo is an example field of IngressOperator. Edit ingressoperator_types.go
-                  to remove/update
+              ingressClass:
                 type: string
+              ingressExternalIps:
+                type: boolean
             type: object
           status:
             description: IngressOperatorStatus defines the observed state of IngressOperator
